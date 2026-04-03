@@ -31,10 +31,10 @@ const PORT = process.env.PORT ?? 3001
 // Tangani OPTIONS preflight sebelum request sampai ke route manapun
 const allowedOrigins = [
   // Lokal development
-  'http://localhost:3000',
-  'http://localhost:3001',
+  // 'http://localhost:3000',
+  // 'http://localhost:3001',
   // Production Vercel — sesuaikan dengan domain kamu
-  'https://linktree-nome-frontend.vercel.app',
+  'https://linktree-nome-frontend.vercel.app/',
   // Tambah custom domain jika ada (misal: https://tokomu.com)
 ]
  
