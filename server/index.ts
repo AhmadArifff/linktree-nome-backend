@@ -35,7 +35,7 @@ const allowedOrigins = [
   // 'http://localhost:3000',
   // 'http://localhost:3001',
   // Production Vercel — sesuaikan dengan domain kamu
-  'https://linktree-nome-frontend.vercel.app/',
+  'https://linktree-nome-west-court-padel.vercel.app/',
   // Tambah custom domain jika ada (misal: https://tokomu.com)
 ]
  
