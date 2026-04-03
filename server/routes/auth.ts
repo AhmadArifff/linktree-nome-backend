@@ -98,10 +98,10 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 
 // ============================================================
 // POST /api/auth/register
-// Register admin baru — hash password + insert ke database
+// Buat akun admin baru
+// Keamanan: cek dulu apakah email sudah terdaftar
 // ============================================================
 router.post('/register', async (req: Request, res: Response): Promise<void> => {
-  // 1. Validasi input
   const parse = RegisterSchema.safeParse(req.body)
   if (!parse.success) {
     res.status(400).json({
@@ -111,67 +111,52 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
     })
     return
   }
-
+ 
   const { email, password } = parse.data
-
+ 
   try {
-    // 2. Cek apakah email sudah terdaftar
-    const { data: existingAdmin } = await supabase
+    // Cek apakah email sudah dipakai
+    const { data: existing } = await supabase
       .from('admins')
       .select('id')
       .eq('email', email.toLowerCase())
-      .single()
-
-    if (existingAdmin) {
+      .maybeSingle()
+ 
+    if (existing) {
       res.status(409).json({
         success: false,
-        message: 'Email sudah terdaftar',
+        message: 'Email sudah terdaftar. Gunakan email lain atau login.',
       })
       return
     }
-
-    // 3. Hash password
-    const passwordHash = await bcrypt.hash(password, 10)
-
-    // 4. Insert admin baru
-    const { data: newAdmin, error } = await supabase
+ 
+    // Hash password dengan bcrypt (salt rounds: 10)
+    const password_hash = await bcrypt.hash(password, 10)
+ 
+    // Insert admin baru
+    const { data: admin, error } = await supabase
       .from('admins')
-      .insert({
-        email: email.toLowerCase(),
-        password_hash: passwordHash,
-      })
-      .select('id, email')
+      .insert({ email: email.toLowerCase(), password_hash })
+      .select('id, email, created_at')
       .single()
-
-    if (error) {
+ 
+    if (error || !admin) {
       console.error('[AUTH] Register insert error:', error)
-      res.status(500).json({
-        success: false,
-        message: 'Gagal membuat akun. Coba lagi.',
-      })
+      res.status(500).json({ success: false, message: 'Gagal membuat akun admin' })
       return
     }
-
-    // 5. Generate JWT token
-    const token = generateToken({ id: newAdmin.id, email: newAdmin.email })
-
+ 
+    // Generate JWT dan langsung login
+    const token = generateToken({ id: admin.id, email: admin.email })
+ 
     res.status(201).json({
       success: true,
-      message: 'Registrasi berhasil',
-      data: {
-        token,
-        admin: {
-          id: newAdmin.id,
-          email: newAdmin.email,
-        },
-      },
+      message: 'Akun admin berhasil dibuat',
+      data: { token, admin: { id: admin.id, email: admin.email } },
     })
   } catch (err) {
     console.error('[AUTH] Register error:', err)
-    res.status(500).json({
-      success: false,
-      message: 'Terjadi kesalahan server. Coba lagi.',
-    })
+    res.status(500).json({ success: false, message: 'Terjadi kesalahan server' })
   }
 })
 

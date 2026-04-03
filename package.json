@@ -17,6 +17,7 @@
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
+    "serverless-http": "^4.0.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

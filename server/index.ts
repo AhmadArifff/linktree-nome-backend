@@ -111,17 +111,18 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
     message: process.env.NODE_ENV === 'production' ? 'Terjadi kesalahan server internal' : err.message,
   })
 })
-
+// if (process.env.NODE_ENV !== 'production') {
+//   app.listen(PORT, () => { ... })
+// }
 // ── Start server ──────────────────────────────────────────────
-if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => {
-    console.log(`
-╔══════════════════════════════════════╗
-║   ShopLink API Server Running        ║
-║   http://localhost:${PORT}              ║
-╚══════════════════════════════════════╝
-    `)
-  })
-}
-
+// if (process.env.NODE_ENV !== 'production') {
+//   app.listen(PORT, () => {
+//     console.log(`
+// ╔══════════════════════════════════════╗
+// ║   ShopLink API Server Running        ║
+// ║   http://localhost:${PORT}              ║
+// ╚══════════════════════════════════════╝
+//     `)
+//   })
+// }
 export default app
