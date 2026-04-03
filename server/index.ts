@@ -27,7 +27,8 @@ const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:3001',
 ]
-
+// Tambah baris ini (alias anti ad-blocker)
+app.use('/api/t', analyticsRoutes)
 app.use(
   cors({
     origin: (origin, callback) => {

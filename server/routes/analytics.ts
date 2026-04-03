@@ -1,16 +1,17 @@
 // ============================================================
-// server/routes/analytics.ts
+// server/routes/analytics.ts — FIXED
 //
-// PERUBAHAN ARSITEKTUR:
-//   Backend sekarang MENERIMA geo data dari frontend (tidak lookup sendiri)
-//   Frontend sudah fetch ipapi.co dari browser → data akurat
-//   Backend cukup simpan city/region/lat/lon yang dikirim dalam body request
+// FIX: Rename public endpoint dari /analytics/event
+//      menjadi /track/hit agar tidak diblokir ad blocker.
 //
-//   KEUNTUNGAN:
-//   - Tidak ada lagi fallback hardcoded Jakarta
-//   - Tidak bergantung pada proxy header x-forwarded-for yang sering hilang
-//   - Akurat karena ipapi.co dipanggil langsung dari IP publik browser user
-//   - Backend lebih ringan (tidak fetch eksternal per event)
+// Ad blocker (uBlock, AdBlock Plus) memblokir URL yang mengandung
+// kata: analytics, track, pixel, beacon, collect, stats
+// → pakai kata netral: /track/hit atau /t/e
+//
+// NOTE: Route ini di-mount di server/index.ts sebagai:
+//   app.use('/api/analytics', analyticsRoutes)   ← public (POST /event → POST /hit)
+//   app.use('/api/admin/analytics', analyticsRoutes) ← admin (GET /summary, dll)
+//   app.use('/api/t', analyticsRoutes)            ← alias anti-adblock
 // ============================================================
 
 import { Router, Request, Response } from 'express'
@@ -20,7 +21,7 @@ import { requireAuth } from '../middleware/auth'
 const router = Router()
 
 function getDateRange(period: string): { from: Date; to: Date } {
-  const to = new Date()
+  const to   = new Date()
   const from = new Date()
   switch (period) {
     case '1d':  from.setDate(from.getDate() - 1);  break
@@ -31,25 +32,14 @@ function getDateRange(period: string): { from: Date; to: Date } {
   return { from, to }
 }
 
-// ============================================================
-// PUBLIC: POST /api/analytics/event
-//
-// Body yang diterima sekarang termasuk geo fields:
-//   { event_type, category_id?, product_id?, session_id?,
-//     city?, region?, country?, latitude?, longitude? }
-//
-// Geo fields dikirim langsung dari browser (lebih akurat).
-// Backend hanya validasi dan simpan — tidak lookup eksternal.
-// ============================================================
-router.post('/event', async (req: Request, res: Response) => {
+// ── Core insert logic (dipakai oleh 2 route) ─────────────────
+async function handleTrackEvent(req: Request, res: Response) {
   try {
     const {
       event_type, category_id, product_id, session_id,
-      // Geo dari frontend (ipapi.co dipanggil di browser)
       city, region, country, latitude, longitude,
     } = req.body
 
-    // Validasi event_type
     if (!['category_view', 'product_click'].includes(event_type)) {
       res.status(400).json({ success: false, message: 'event_type tidak valid' })
       return
@@ -60,7 +50,7 @@ router.post('/event', async (req: Request, res: Response) => {
       return
     }
 
-    // Dedup per session_id (jika ada) — cegah spam dari refresh/re-render
+    // Deduplication per session
     if (session_id && typeof session_id === 'string') {
       const windowMin  = event_type === 'product_click' ? 5 : 30
       const dedupeFrom = new Date(Date.now() - windowMin * 60 * 1000).toISOString()
@@ -83,30 +73,40 @@ router.post('/event', async (req: Request, res: Response) => {
       }
     }
 
-    // Insert — simpan geo langsung dari body (dikirim frontend)
     const { error } = await supabase.from('analytics_events').insert({
       event_type,
-      category_id:  category_id  ?? null,
-      product_id:   product_id   ?? null,
-      session_id:   session_id   ?? null,
-      ip_address:   null,                         // tidak lagi dipakai untuk geo
-      city:         city          ?? null,
-      region:       region        ?? null,
-      country:      country       ?? 'ID',
-      latitude:     latitude      ?? null,
-      longitude:    longitude     ?? null,
+      category_id: category_id ?? null,
+      product_id:  product_id  ?? null,
+      session_id:  session_id  ?? null,
+      ip_address:  null,
+      city:        city        ?? null,
+      region:      region      ?? null,
+      country:     country     ?? 'ID',
+      latitude:    latitude    ?? null,
+      longitude:   longitude   ?? null,
     })
 
     if (error) throw error
     res.status(201).json({ success: true })
   } catch (err) {
-    console.error('[analytics/event]', err)
-    res.status(200).json({ success: false, message: 'internal error' })
+    console.error('[track/event]', err)
+    // Selalu return 200 ke publik — jangan tampilkan error ke visitor
+    res.status(200).json({ success: false })
   }
-})
+}
 
 // ============================================================
-// ADMIN: GET /api/admin/analytics/summary?period=7d
+// PUBLIC: POST /api/analytics/event  (route lama — tetap ada)
+// PUBLIC: POST /api/t/hit            (route baru — anti ad-block)
+//
+// Frontend sebaiknya pakai /api/t/hit
+// ============================================================
+router.post('/event', handleTrackEvent)   // lama (mungkin diblokir)
+router.post('/hit',   handleTrackEvent)   // ✅ baru — aman dari ad blocker
+
+
+// ============================================================
+// ADMIN: GET /summary  →  /api/admin/analytics/summary
 // ============================================================
 router.get('/summary', requireAuth, async (req: Request, res: Response) => {
   try {
@@ -124,7 +124,10 @@ router.get('/summary', requireAuth, async (req: Request, res: Response) => {
     const totalViews  = rows.filter(r => r.event_type === 'category_view').length
     const totalClicks = rows.filter(r => r.event_type === 'product_click').length
 
-    res.json({ success: true, data: { totalViews, totalClicks, period: req.query.period ?? '7d' } })
+    res.json({
+      success: true,
+      data: { totalViews, totalClicks, period: req.query.period ?? '7d' },
+    })
   } catch (err) {
     console.error('[analytics/summary]', err)
     res.status(500).json({ success: false, message: 'Gagal mengambil summary' })
@@ -132,13 +135,14 @@ router.get('/summary', requireAuth, async (req: Request, res: Response) => {
 })
 
 // ============================================================
-// ADMIN: GET /api/admin/analytics/daily?period=7d
+// ADMIN: GET /daily
 // ============================================================
 router.get('/daily', requireAuth, async (req: Request, res: Response) => {
   try {
     const { from, to } = getDateRange((req.query.period as string) ?? '7d')
     const { data, error } = await supabase.rpc('get_daily_stats', {
-      p_from: from.toISOString(), p_to: to.toISOString(),
+      p_from: from.toISOString(),
+      p_to:   to.toISOString(),
     })
     if (error) throw error
     res.json({ success: true, data: data ?? [] })
@@ -149,13 +153,14 @@ router.get('/daily', requireAuth, async (req: Request, res: Response) => {
 })
 
 // ============================================================
-// ADMIN: GET /api/admin/analytics/products?period=7d
+// ADMIN: GET /products
 // ============================================================
 router.get('/products', requireAuth, async (req: Request, res: Response) => {
   try {
     const { from, to } = getDateRange((req.query.period as string) ?? '7d')
     const { data, error } = await supabase.rpc('get_product_stats', {
-      p_from: from.toISOString(), p_to: to.toISOString(),
+      p_from: from.toISOString(),
+      p_to:   to.toISOString(),
     })
     if (error) throw error
     res.json({ success: true, data: data ?? [] })
@@ -166,13 +171,14 @@ router.get('/products', requireAuth, async (req: Request, res: Response) => {
 })
 
 // ============================================================
-// ADMIN: GET /api/admin/analytics/categories?period=7d
+// ADMIN: GET /categories
 // ============================================================
 router.get('/categories', requireAuth, async (req: Request, res: Response) => {
   try {
     const { from, to } = getDateRange((req.query.period as string) ?? '7d')
     const { data, error } = await supabase.rpc('get_category_stats', {
-      p_from: from.toISOString(), p_to: to.toISOString(),
+      p_from: from.toISOString(),
+      p_to:   to.toISOString(),
     })
     if (error) throw error
     res.json({ success: true, data: data ?? [] })
@@ -183,13 +189,14 @@ router.get('/categories', requireAuth, async (req: Request, res: Response) => {
 })
 
 // ============================================================
-// ADMIN: GET /api/admin/analytics/locations?period=7d
+// ADMIN: GET /locations
 // ============================================================
 router.get('/locations', requireAuth, async (req: Request, res: Response) => {
   try {
     const { from, to } = getDateRange((req.query.period as string) ?? '7d')
     const { data, error } = await supabase.rpc('get_location_stats', {
-      p_from: from.toISOString(), p_to: to.toISOString(),
+      p_from: from.toISOString(),
+      p_to:   to.toISOString(),
     })
     if (error) throw error
     res.json({ success: true, data: data ?? [] })
