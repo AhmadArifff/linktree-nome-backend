@@ -20,9 +20,18 @@ import { requireAuth } from '../middleware/auth'
 
 const router = Router()
 
-function getDateRange(period: string): { from: Date; to: Date } {
-  const to   = new Date()
-  const from = new Date()
+function getDateRange(period: string, fromQuery?: string, toQuery?: string): { from: Date; to: Date } {
+  const now = new Date()
+  if (fromQuery && toQuery) {
+    const from = new Date(String(fromQuery))
+    const to = new Date(String(toQuery))
+    if (!isNaN(from.getTime()) && !isNaN(to.getTime())) {
+      return { from, to }
+    }
+  }
+
+  const to = new Date(now)
+  const from = new Date(now)
   switch (period) {
     case '1d':  from.setDate(from.getDate() - 1);  break
     case '7d':  from.setDate(from.getDate() - 7);  break
@@ -110,7 +119,11 @@ router.post('/hit',   handleTrackEvent)   // ✅ baru — aman dari ad blocker
 // ============================================================
 router.get('/summary', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { from, to } = getDateRange((req.query.period as string) ?? '7d')
+    const { from, to } = getDateRange(
+      (req.query.period as string) ?? '7d',
+      req.query.from as string | undefined,
+      req.query.to as string | undefined,
+    )
 
     const { data, error } = await supabase
       .from('analytics_events')
@@ -139,7 +152,11 @@ router.get('/summary', requireAuth, async (req: Request, res: Response) => {
 // ============================================================
 router.get('/daily', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { from, to } = getDateRange((req.query.period as string) ?? '7d')
+    const { from, to } = getDateRange(
+      (req.query.period as string) ?? '7d',
+      req.query.from as string | undefined,
+      req.query.to as string | undefined,
+    )
     const { data, error } = await supabase.rpc('get_daily_stats', {
       p_from: from.toISOString(),
       p_to:   to.toISOString(),
@@ -157,7 +174,11 @@ router.get('/daily', requireAuth, async (req: Request, res: Response) => {
 // ============================================================
 router.get('/products', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { from, to } = getDateRange((req.query.period as string) ?? '7d')
+    const { from, to } = getDateRange(
+      (req.query.period as string) ?? '7d',
+      req.query.from as string | undefined,
+      req.query.to as string | undefined,
+    )
     const { data, error } = await supabase.rpc('get_product_stats', {
       p_from: from.toISOString(),
       p_to:   to.toISOString(),
@@ -175,7 +196,11 @@ router.get('/products', requireAuth, async (req: Request, res: Response) => {
 // ============================================================
 router.get('/categories', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { from, to } = getDateRange((req.query.period as string) ?? '7d')
+    const { from, to } = getDateRange(
+      (req.query.period as string) ?? '7d',
+      req.query.from as string | undefined,
+      req.query.to as string | undefined,
+    )
     const { data, error } = await supabase.rpc('get_category_stats', {
       p_from: from.toISOString(),
       p_to:   to.toISOString(),
@@ -193,7 +218,11 @@ router.get('/categories', requireAuth, async (req: Request, res: Response) => {
 // ============================================================
 router.get('/locations', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { from, to } = getDateRange((req.query.period as string) ?? '7d')
+    const { from, to } = getDateRange(
+      (req.query.period as string) ?? '7d',
+      req.query.from as string | undefined,
+      req.query.to as string | undefined,
+    )
     const { data, error } = await supabase.rpc('get_location_stats', {
       p_from: from.toISOString(),
       p_to:   to.toISOString(),

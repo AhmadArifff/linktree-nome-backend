@@ -15,6 +15,8 @@ import categoryRoutes from './routes/categories'
 import productRoutes from './routes/products'
 import storeRoutes from './routes/store'
 import analyticsRoutes from './routes/analytics'   // ← NEW
+import scheduledProductsRoutes from './routes/scheduledProducts' // ← NEW: Scheduler routes
+import { initializeScheduler } from './lib/scheduler' // ← NEW: Scheduler initialization
 
 dotenv.config()
 
@@ -32,8 +34,8 @@ const PORT = process.env.PORT ?? 3001
 // Tangani OPTIONS preflight sebelum request sampai ke route manapun
 const allowedOrigins = [
   // Lokal development
-  // 'http://localhost:3000',
-  // 'http://localhost:3001',
+  'http://localhost:3000',
+  'http://localhost:3001',
   // Production Vercel — sesuaikan dengan domain kamu
   'https://linktree-nome-west-court-padel.vercel.app/',
   // Tambah custom domain jika ada (misal: https://tokomu.com)
@@ -122,6 +124,7 @@ app.use('/api/admin/store',      storeRoutes)
 app.use('/api/admin/categories', categoryRoutes)
 app.use('/api/admin/products',   productRoutes)
 app.use('/api/admin/analytics',  analyticsRoutes)
+app.use('/api/admin/scheduled-products', scheduledProductsRoutes) // ← NEW: Scheduled products admin endpoints
  
 // ── LANGKAH 6: 404 handler ───────────────────────────────────
 app.use((_req: Request, res: Response) => {
@@ -171,6 +174,11 @@ if (process.env.NODE_ENV !== 'production') {
 ║   http://localhost:${PORT}              ║
 ╚══════════════════════════════════════╝
     `)
+    // ← NEW: Initialize scheduler on server start
+    initializeScheduler()
   })
+} else {
+  // ← NEW: Initialize scheduler in production too
+  initializeScheduler()
 }
 export default app

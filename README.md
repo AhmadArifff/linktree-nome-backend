@@ -72,6 +72,44 @@ Cek health endpoint:
 curl http://localhost:3001/api/health
 ```
 
+### 4. Jalankan TestSprite untuk pengujian lokal
+
+1. Simpan API key TestSprite lokal di file `.env` atau environment variable:
+
+```env
+TESTSPRITE_API_KEY=sk-user-your-local-test-key
+```
+
+2. Jika ingin menguji login admin, panggil endpoint login berikut dari TestSprite:
+
+```http
+POST http://localhost:3001/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin.nome.com",
+  "password": "nome123"
+}
+```
+
+Respons yang diharapkan berisi JWT token di `data.token`.
+
+3. Gunakan token tersebut untuk request selanjutnya:
+
+```http
+Authorization: Bearer {{token}}
+```
+
+4. Jalankan TestSprite dari folder `backend`:
+
+```bash
+npm run test:sprite
+```
+
+5. Atau gunakan konfigurasi VS Code di `backend/.vscode/mcp.json`.
+
+> Gunakan API key ini hanya untuk project lokal ini. Jika membuka project baru, buat API key baru agar hasil reporting tetap bersih dan terpisah.
+
 ---
 
 ## API Endpoints
