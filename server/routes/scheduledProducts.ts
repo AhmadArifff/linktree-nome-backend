@@ -212,7 +212,7 @@ router.get("/info", requireAuth, async (req: Request, res: Response) => {
         description:
           "Automatic product creation scheduler for ShopLink platform",
         schedule: {
-          time: "07:00 AM",
+          time: "06:30 WIB",
           timezone: "Asia/Jakarta (WIB)",
           frequency: "Daily",
           duration: "365 days (1 year)",
@@ -311,6 +311,33 @@ router.get("/info", requireAuth, async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: "Failed to fetch scheduler info",
+    });
+  }
+});
+
+/**
+ * POST /api/test/execute-now
+ * TEST ENDPOINT: Execute scheduled product creation immediately (NO AUTH)
+ * FOR TESTING ONLY - Remove in production
+ */
+router.post("/execute-now", async (req: Request, res: Response) => {
+  try {
+    const { createProductsForAllCategories } = await import("../lib/createScheduledProduct");
+    
+    console.log("🧪 TEST: Executing product creation NOW");
+    const result = await createProductsForAllCategories();
+    
+    res.status(200).json({
+      success: true,
+      message: "Test execution completed",
+      data: result,
+    });
+  } catch (error) {
+    console.error("Test execution error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Test execution failed",
+      error: error instanceof Error ? error.message : String(error),
     });
   }
 });

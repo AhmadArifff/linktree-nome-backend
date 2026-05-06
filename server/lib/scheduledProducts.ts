@@ -291,8 +291,9 @@ export function generateAllCategoryProducts() {
  */
 export const SCHEDULED_PRODUCT_CONFIG = {
   TOTAL_RUNS: 365, // 365 days = 1 year
-  CRON_TIME: "0 7 * * *", // 07:00 AM daily (UTC time - will be converted to WIB)
-  TIMEZONE: "Asia/Jakarta", // WIB timezone
+  // Internal node-cron uses Jakarta local time because scheduler.ts sets timezone.
+  CRON_TIME: "30 6 * * *", // 06:30 WIB
+  TIMEZONE: "Asia/Jakarta",
   CATEGORIES_PER_RUN: 5, // Create 1 product per category per day = 5 products per day
 };
 

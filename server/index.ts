@@ -9,6 +9,8 @@
 import express, { Request, Response, NextFunction } from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
+import fs from 'fs'
+import path from 'path'
 
 import authRoutes from './routes/auth'
 import categoryRoutes from './routes/categories'
@@ -18,18 +20,16 @@ import analyticsRoutes from './routes/analytics'   // ← NEW
 import scheduledProductsRoutes from './routes/scheduledProducts' // ← NEW: Scheduler routes
 import { initializeScheduler } from './lib/scheduler' // ← NEW: Scheduler initialization
 
-dotenv.config()
+const envLocalPath = path.resolve(process.cwd(), '.env.local')
+const envPath = fs.existsSync(envLocalPath)
+  ? envLocalPath
+  : path.resolve(process.cwd(), '.env')
+dotenv.config({ path: envPath })
 
 const app = express()
 app.use(express.json())
 const PORT = process.env.PORT ?? 3001
 
-// ── CORS ─────────────────────────────────────────────────────
-// const allowedOrigins = [
-//   process.env.FRONTEND_URL ?? 'http://localhost:3000',
-//   'http://localhost:3000',
-//   'http://localhost:3001','https://linktree-nome-frontend.vercel.app',
-// ]
 // ── LANGKAH 1: CORS — HARUS PALING PERTAMA ───────────────────
 // Tangani OPTIONS preflight sebelum request sampai ke route manapun
 const allowedOrigins = [
@@ -125,6 +125,11 @@ app.use('/api/admin/categories', categoryRoutes)
 app.use('/api/admin/products',   productRoutes)
 app.use('/api/admin/analytics',  analyticsRoutes)
 app.use('/api/admin/scheduled-products', scheduledProductsRoutes) // ← NEW: Scheduled products admin endpoints
+
+// Test endpoints (only for development)
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/api/test', scheduledProductsRoutes)
+}
  
 // ── LANGKAH 6: 404 handler ───────────────────────────────────
 app.use((_req: Request, res: Response) => {
@@ -151,21 +156,21 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
       : err.message,
   })
 })
-// if (process.env.NODE_ENV !== 'production') {
-//   app.listen(PORT, () => { ... })
-// }
-// ── Start server ──────────────────────────────────────────────
-// if (process.env.NODE_ENV !== 'production') {
-//   app.listen(PORT, () => {
-//     console.log(`
-// ╔══════════════════════════════════════╗
-// ║   ShopLink API Server Running        ║
-// ║   http://localhost:${PORT}              ║
-// ╚══════════════════════════════════════╝
-//     `)
-//   })
-// }
+
 // ── Start server (lokal saja, Vercel pakai export default) ────
+const enableInternalScheduler = process.env.ENABLE_INTERNAL_SCHEDULER === 'true'
+const isVercelRuntime = process.env.VERCEL === '1'
+const shouldRunInternalScheduler =
+  enableInternalScheduler &&
+  process.env.NODE_ENV !== 'production' &&
+  !isVercelRuntime
+
+if (enableInternalScheduler && !shouldRunInternalScheduler) {
+  console.warn(
+    '[SCHEDULER] ENABLE_INTERNAL_SCHEDULER is true, but internal scheduler is disabled in production/serverless runtime. Use Vercel Cron endpoint /api/cron/scheduled-products instead.'
+  )
+}
+
 if (process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => {
     console.log(`
@@ -174,11 +179,13 @@ if (process.env.NODE_ENV !== 'production') {
 ║   http://localhost:${PORT}              ║
 ╚══════════════════════════════════════╝
     `)
-    // ← NEW: Initialize scheduler on server start
-    initializeScheduler()
+    if (shouldRunInternalScheduler) {
+      initializeScheduler()
+    }
   })
 } else {
-  // ← NEW: Initialize scheduler in production too
-  initializeScheduler()
+  if (shouldRunInternalScheduler) {
+    initializeScheduler()
+  }
 }
 export default app

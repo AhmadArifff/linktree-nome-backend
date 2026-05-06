@@ -2,14 +2,27 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/index.ts",
+      "src": "api/**/*.ts",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
+      "src": "/api/cron/scheduled-products",
+      "dest": "/api/cron/scheduled-products.ts"
+    },
+    {
       "src": "/(.*)",
-      "dest": "api/index.ts"
+      "dest": "/api/index.ts"
     }
-  ]
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/scheduled-products",
+      "schedule": "30 23 * * *"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  }
 }

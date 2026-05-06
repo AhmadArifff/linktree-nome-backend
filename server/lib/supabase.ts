@@ -6,7 +6,15 @@
 
 import { createClient } from '@supabase/supabase-js'
 import dotenv from "dotenv";
-dotenv.config();
+import fs from 'fs'
+import path from 'path'
+
+const envLocalPath = path.resolve(process.cwd(), '.env.local')
+const envPath = fs.existsSync(envLocalPath)
+  ? envLocalPath
+  : path.resolve(process.cwd(), '.env')
+
+dotenv.config({ path: envPath });
 
 const supabaseUrl = process.env.SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY

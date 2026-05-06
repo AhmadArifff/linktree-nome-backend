@@ -1,8 +1,6 @@
 /**
  * Scheduler Service
- * Manages cron jobs for automated product creation
- * Runs daily at 07:00 AM WIB (Asia/Jakarta timezone)
- * Total duration: 365 days (1 year)
+ * Manages internal node-cron job for automated product creation (local/dev runtime).
  */
 
 import cron from "node-cron";
@@ -23,7 +21,6 @@ interface SchedulerState {
   isPaused: boolean;
 }
 
-// Global scheduler state
 let schedulerState: SchedulerState = {
   isRunning: false,
   totalRuns: SCHEDULED_PRODUCT_CONFIG.TOTAL_RUNS,
@@ -34,19 +31,98 @@ let schedulerState: SchedulerState = {
 
 let cronJob: cron.ScheduledTask | null = null;
 
+function getCronHourMinute(cronExpression: string): {
+  minute: number;
+  hour: number;
+} {
+  const parts = cronExpression.trim().split(/\s+/);
+  if (parts.length < 2) {
+    throw new Error(`Invalid cron expression: ${cronExpression}`);
+  }
+
+  const minute = Number(parts[0]);
+  const hour = Number(parts[1]);
+  if (
+    Number.isNaN(minute) ||
+    Number.isNaN(hour) ||
+    minute < 0 ||
+    minute > 59 ||
+    hour < 0 ||
+    hour > 23
+  ) {
+    throw new Error(`Invalid cron minute/hour: ${cronExpression}`);
+  }
+  return { minute, hour };
+}
+
 /**
- * Initialize and start the scheduler
- * This should be called once when the server starts
+ * Compute next run for Asia/Jakarta.
+ * Internal scheduler uses Jakarta local cron (with timezone option).
  */
+function getNextRunTime(): Date {
+  const now = new Date();
+  const { minute: targetMinute, hour: targetHour } = getCronHourMinute(
+    SCHEDULED_PRODUCT_CONFIG.CRON_TIME
+  );
+
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: SCHEDULED_PRODUCT_CONFIG.TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  const map = Object.fromEntries(
+    formatter.formatToParts(now).map((part) => [part.type, part.value])
+  );
+
+  const year = Number(map.year);
+  const month = Number(map.month);
+  const day = Number(map.day);
+  const hour = Number(map.hour);
+  const minute = Number(map.minute);
+
+  // Asia/Jakarta = UTC+7 (no DST)
+  const nextRun = new Date(
+    Date.UTC(year, month - 1, day, targetHour - 7, targetMinute, 0)
+  );
+
+  if (hour > targetHour || (hour === targetHour && minute >= targetMinute)) {
+    nextRun.setUTCDate(nextRun.getUTCDate() + 1);
+  }
+
+  return nextRun;
+}
+
 export function initializeScheduler(): void {
   if (schedulerState.isRunning) {
-    console.log("⚠️  Scheduler is already running");
+    console.log("Scheduler is already running");
     return;
   }
 
-  console.log("\n🚀 Initializing Product Creation Scheduler...");
-  console.log(`   Cron Time: ${SCHEDULED_PRODUCT_CONFIG.CRON_TIME}`);
+  if (!cron.validate(SCHEDULED_PRODUCT_CONFIG.CRON_TIME)) {
+    console.error(
+      `Invalid cron expression: ${SCHEDULED_PRODUCT_CONFIG.CRON_TIME}`
+    );
+    return;
+  }
+
+  const { minute, hour } = getCronHourMinute(SCHEDULED_PRODUCT_CONFIG.CRON_TIME);
+  const utcHour = (hour - 7 + 24) % 24;
+
+  console.log("\nInitializing Product Creation Scheduler...");
+  console.log(`   Cron Time (Jakarta): ${SCHEDULED_PRODUCT_CONFIG.CRON_TIME}`);
   console.log(`   Timezone: ${SCHEDULED_PRODUCT_CONFIG.TIMEZONE}`);
+  console.log(
+    `   Schedule: Daily at ${String(hour).padStart(2, "0")}:${String(
+      minute
+    ).padStart(2, "0")} WIB (${String(utcHour).padStart(2, "0")}:${String(
+      minute
+    ).padStart(2, "0")} UTC)`
+  );
   console.log(
     `   Total Runs: ${SCHEDULED_PRODUCT_CONFIG.TOTAL_RUNS} days (1 year)`
   );
@@ -57,47 +133,46 @@ export function initializeScheduler(): void {
     `   Daily Product Creation: ${SCHEDULED_PRODUCT_CONFIG.CATEGORIES_PER_RUN} products\n`
   );
 
-  // Create cron job that runs at 7:00 AM WIB daily
-  // Using UTC cron expression and timezone parameter
   cronJob = cron.schedule(
     SCHEDULED_PRODUCT_CONFIG.CRON_TIME,
     async () => {
-      // Check if scheduler is paused
       if (schedulerState.isPaused) {
-        console.log("⏸️  Scheduler is paused, skipping this run");
+        console.log("Scheduler is paused, skipping this run");
         return;
       }
 
-      // Check if max runs reached
       if (
         schedulerState.completedRuns >= SCHEDULED_PRODUCT_CONFIG.TOTAL_RUNS
       ) {
         console.log(
-          "✅ Scheduler has completed all 365 runs. Stopping scheduler..."
+          `Scheduler has completed all ${SCHEDULED_PRODUCT_CONFIG.TOTAL_RUNS} runs. Stopping scheduler...`
         );
         stopScheduler();
         return;
       }
 
       try {
-        // Execute daily product creation
-        const result = await createProductsForAllCategories();
+        await createProductsForAllCategories();
 
         schedulerState.completedRuns += 1;
         schedulerState.lastRunTime = new Date();
         schedulerState.nextRunTime = getNextRunTime();
 
-        // Log run completion
         console.log(
-          `\n📈 Run ${schedulerState.completedRuns}/${SCHEDULED_PRODUCT_CONFIG.TOTAL_RUNS} completed at ${schedulerState.lastRunTime.toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })}`
+          `\nRun ${schedulerState.completedRuns}/${SCHEDULED_PRODUCT_CONFIG.TOTAL_RUNS} completed at ${schedulerState.lastRunTime.toLocaleString(
+            "id-ID",
+            { timeZone: SCHEDULED_PRODUCT_CONFIG.TIMEZONE }
+          )}`
         );
         console.log(
-          `   Next run: ${schedulerState.nextRunTime?.toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })}\n`
+          `   Next run: ${schedulerState.nextRunTime?.toLocaleString("id-ID", {
+            timeZone: SCHEDULED_PRODUCT_CONFIG.TIMEZONE,
+          })}\n`
         );
       } catch (error) {
         schedulerState.failedRuns += 1;
         console.error(
-          "❌ Error during scheduled product creation:",
+          "Error during scheduled product creation:",
           error instanceof Error ? error.message : error
         );
       }
@@ -112,74 +187,61 @@ export function initializeScheduler(): void {
   schedulerState.nextRunTime = getNextRunTime();
 
   console.log(
-    `✅ Scheduler started! Next run: ${schedulerState.nextRunTime?.toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })}\n`
+    `Scheduler started. Next run: ${schedulerState.nextRunTime?.toLocaleString(
+      "id-ID",
+      { timeZone: SCHEDULED_PRODUCT_CONFIG.TIMEZONE }
+    )}\n`
   );
 }
 
-/**
- * Stop the scheduler
- */
 export function stopScheduler(): void {
-  if (cronJob) {
-    cronJob.stop();
-    cronJob = null;
-    schedulerState.isRunning = false;
-    console.log("⛔ Scheduler stopped");
-  }
+  if (!cronJob) return;
+  cronJob.stop();
+  cronJob = null;
+  schedulerState.isRunning = false;
+  console.log("Scheduler stopped");
 }
 
-/**
- * Pause the scheduler (cron job continues to run, but won't execute tasks)
- */
 export function pauseScheduler(): void {
   schedulerState.isPaused = true;
-  console.log("⏸️  Scheduler paused - will not execute tasks");
+  console.log("Scheduler paused - will not execute tasks");
 }
 
-/**
- * Resume the scheduler
- */
 export function resumeScheduler(): void {
   if (!schedulerState.isRunning) {
-    console.log("⚠️  Scheduler is not running. Call initializeScheduler() first");
+    console.log("Scheduler is not running. Call initializeScheduler() first");
     return;
   }
   schedulerState.isPaused = false;
-  console.log("▶️  Scheduler resumed");
+  console.log("Scheduler resumed");
 }
 
-/**
- * Force execute the scheduled task immediately (for testing)
- */
 export async function executeScheduledTaskNow(): Promise<void> {
   if (
     schedulerState.completedRuns >= SCHEDULED_PRODUCT_CONFIG.TOTAL_RUNS
   ) {
     console.log(
-      "⚠️  Max runs (365) already reached. Cannot execute more tasks."
+      `Max runs (${SCHEDULED_PRODUCT_CONFIG.TOTAL_RUNS}) already reached. Cannot execute more tasks.`
     );
     return;
   }
 
-  console.log("🔄 Executing scheduled task immediately (manual trigger)...");
+  console.log("Executing scheduled task immediately (manual trigger)...");
   try {
-    const result = await createProductsForAllCategories();
+    await createProductsForAllCategories();
     schedulerState.completedRuns += 1;
     schedulerState.lastRunTime = new Date();
     schedulerState.nextRunTime = getNextRunTime();
 
     console.log(
-      `✅ Task executed successfully. Run count: ${schedulerState.completedRuns}/${SCHEDULED_PRODUCT_CONFIG.TOTAL_RUNS}`
+      `Task executed successfully. Run count: ${schedulerState.completedRuns}/${SCHEDULED_PRODUCT_CONFIG.TOTAL_RUNS}`
     );
   } catch (error) {
     schedulerState.failedRuns += 1;
-    console.error("❌ Error executing scheduled task:", error);
+    console.error("Error executing scheduled task:", error);
   }
 }
 
-/**
- * Get current scheduler state
- */
 export function getSchedulerState(): SchedulerState {
   return {
     ...schedulerState,
@@ -187,36 +249,6 @@ export function getSchedulerState(): SchedulerState {
   };
 }
 
-/**
- * Get next scheduled run time
- */
-function getNextRunTime(): Date {
-  const now = new Date();
-  const nextRun = new Date(now);
-
-  // Set time to 7:00 AM WIB
-  nextRun.setUTCHours(0, 0, 0, 0); // Reset to midnight UTC
-
-  // Convert to WIB (UTC+7)
-  nextRun.setUTCHours(0, 0, 0, 0);
-  nextRun.setUTCHours(nextRun.getUTCHours() + 7);
-
-  // Adjust to 7:00 AM WIB
-  const wibHour = 7;
-  const wibTime = new Date(nextRun);
-  wibTime.setUTCHours(wibHour - 7, 0, 0, 0);
-
-  // If the time has already passed today, schedule for tomorrow
-  if (wibTime < now) {
-    wibTime.setUTCDate(wibTime.getUTCDate() + 1);
-  }
-
-  return wibTime;
-}
-
-/**
- * Reset scheduler state (admin use only)
- */
 export function resetSchedulerState(): void {
   stopScheduler();
   schedulerState = {
@@ -226,7 +258,7 @@ export function resetSchedulerState(): void {
     failedRuns: 0,
     isPaused: false,
   };
-  console.log("🔄 Scheduler state reset");
+  console.log("Scheduler state reset");
 }
 
 export default {
