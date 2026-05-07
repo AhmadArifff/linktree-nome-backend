@@ -261,7 +261,7 @@ router.get("/info", requireAuth, async (req: Request, res: Response) => {
             "is_active",
           ],
           nameFormat: "Auto-generated based on category templates",
-          priceFormat: 'Rp XXX.XXX (Indonesian Rupiah format)',
+          priceFormat: "Numeric string only (e.g. 89000, without Rp prefix)",
           marketplaceUrl:
             "Random Tokopedia or Shopee search links for category",
           imageUrl: "Not generated (optional field)",

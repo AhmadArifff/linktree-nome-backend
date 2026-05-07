@@ -35,6 +35,24 @@ import { uploadSingle, generateFileName } from '../lib/upload'
 
 const router = Router()
 
+function sanitizePriceInput(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const digitsOnly = value.replace(/\D/g, '')
+  return digitsOnly.length > 0 ? digitsOnly : undefined
+}
+
+function normalizePriceField<T extends Record<string, unknown>>(body: T): T {
+  const normalized = { ...body } as Record<string, unknown>
+
+  if (Object.prototype.hasOwnProperty.call(normalized, 'price')) {
+    const sanitizedPrice = sanitizePriceInput(normalized.price)
+    if (sanitizedPrice) normalized.price = sanitizedPrice
+    else delete normalized.price
+  }
+
+  return normalized as T
+}
+
 // Schema validasi produk (full)
 const ProductSchema = z.object({
   category_id: z.string().uuid({ message: 'category_id harus berupa UUID valid' }),
@@ -214,7 +232,7 @@ router.post('/', requireAuth, (req: AuthRequest, res: Response): void => {
       return
     }
 
-    const parse = ProductSchema.safeParse(req.body)
+    const parse = ProductSchema.safeParse(normalizePriceField(req.body))
     if (!parse.success) {
       res.status(400).json({
         success: false,
@@ -255,7 +273,7 @@ router.post('/', requireAuth, (req: AuthRequest, res: Response): void => {
 // ============================================================
 router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params
-  const parse = ProductPatchSchema.safeParse(req.body)
+  const parse = ProductPatchSchema.safeParse(normalizePriceField(req.body))
 
   if (!parse.success) {
     res.status(400).json({
@@ -306,7 +324,7 @@ router.put('/:id', requireAuth, (req: AuthRequest, res: Response): void => {
     }
 
     const { id } = req.params
-    const parse = ProductSchema.partial().safeParse(req.body)
+    const parse = ProductSchema.partial().safeParse(normalizePriceField(req.body))
 
     if (!parse.success) {
       res.status(400).json({

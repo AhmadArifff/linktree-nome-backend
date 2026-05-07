@@ -267,7 +267,8 @@ export function generateProductData(categoryId: string) {
     name: productName,
     short_description: shortDescription,
     description: `${shortDescription}\n\nProduk ini adalah bagian dari koleksi eksklusif kami yang dirancang khusus untuk memenuhi kebutuhan Anda dengan kualitas terbaik.`,
-    price: `Rp ${price.toLocaleString("id-ID")}`,
+    // Store raw numeric value only; UI layer handles "Rp" prefix/formatting.
+    price: String(price),
     marketplace_url: marketplaceUrl,
     sort_order: Math.floor(Math.random() * 100),
     is_active: true,
